@@ -47,6 +47,7 @@ def pdf_orchestrator(context):
     entra_id = payload.get("entra_id")
     session_id = payload.get("session_id")
     index_name = payload.get("index_name")
+    index_stem_name = payload.get("index_stem_name")
     cosmos_record_id = payload.get("cosmos_record_id")
     automatically_delete = payload.get("automatically_delete")
 
