@@ -1,0 +1,1 @@
+# AZFunctions_Ingestion_Quickstart_v2
