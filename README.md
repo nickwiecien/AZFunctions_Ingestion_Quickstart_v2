@@ -103,7 +103,7 @@ POST to `http://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/orchestrators/p
     "prefix_path": "<UPLOADED_FILE_PATH>",
     "entra_id": "<USER_ENTRA_ID>",
     "session_id": "<USER_SESSION_ID>",
-    "index_name": "<YOUR_ROOT_INDEX_NAME>",
+    "index_name": "<YOUR_INDEX_NAME>",
     "cosmos_record_id": "<YOUR_COSMOS_LOG_RECORD_ID>"
     "automatically_delete": true
 }
