@@ -46,12 +46,13 @@ def pdf_orchestrator(context):
     prefix_path = payload.get("prefix_path")
     entra_id = payload.get("entra_id")
     session_id = payload.get("session_id")
-    index_stem_name = payload.get("index_stem_name")
+    index_name = payload.get("index_name")
+    cosmos_record_id = payload.get("cosmos_record_id")
     automatically_delete = payload.get("automatically_delete")
 
     # Create a status record that can be used to update CosmosDB
     status_record = payload
-    status_record['id'] = entra_id + session_id
+    status_record['id'] = cosmos_record_id
     status_record['status'] = 'STARTING'
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
@@ -121,6 +122,9 @@ def pdf_orchestrator(context):
 
     # Get the current index and its fields
     latest_index, fields = get_current_index(index_stem_name)
+
+    # Use the user's provided index name rather than the latest index
+    latest_index = index_name
 
     # Initialize list to store tasks for inserting records
     insert_tasks = []
