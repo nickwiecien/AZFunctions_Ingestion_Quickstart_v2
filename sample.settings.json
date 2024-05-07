@@ -1,0 +1,24 @@
+{
+    "IsEncrypted": false,
+    "Values": {
+      "AzureWebJobsStorage": "",
+      "FUNCTIONS_WORKER_RUNTIME": "",
+      "AzureWebJobsFeatureFlags": "",
+      "STORAGE_CONN_STR": "",
+      "DOC_INTEL_ENDPOINT": "",
+      "DOC_INTEL_KEY": "",
+      "AOAI_KEY": "",
+      "AOAI_ENDPOINT": "",
+      "AOAI_EMBEDDINGS_MODEL": "",
+      "AOAI_WHISPER_KEY": "",
+      "AOAI_WHISPER_ENDPOINT": "",
+      "AOAI_WHISPER_MODEL": "",
+      "SEARCH_ENDPOINT": "",
+      "SEARCH_KEY": "",
+      "SEARCH_SERVICE_NAME": "",
+      "COSMOS_ENDPOINT": "",
+      "COSMOS_KEY": "",
+      "COSMOS_DATABASE": "",
+      "COSMOS_CONTAINER": ""
+    }
+}
