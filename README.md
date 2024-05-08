@@ -83,8 +83,9 @@ POST to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/create_new_ind
 
 See `Get_Active_Index` in Postman collection
 
-GET to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/get_active_index?code=<YOUR-FUNCTION-KEY>`
+POST to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/get_active_index?code=<YOUR-FUNCTION-KEY>`
 ```
+# Sample Payload
 {
     "index_stem_name":"rag-index"
 }
@@ -97,6 +98,7 @@ See `Trigger_PDF_Ingestion` in Postman collection
 
 POST to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/orchestrators/pdf_orchestrator?code=<YOUR-FUNCTION-KEY>`
 ```
+# Sample Payload
 {
     "source_container": "<SOURCE_STORAGE_CONTAINER>",
     "extract_container": "<EXTRACT_STORAGE_CONTAINER>",
