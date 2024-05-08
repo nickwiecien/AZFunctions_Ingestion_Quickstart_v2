@@ -118,6 +118,8 @@ def pdf_orchestrator(context):
 
     ###################### DATA INDEXING START ######################
 
+    prefix_path = prefix_path.split('.')[0]
+
     # Get the list of files in the source container
     files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container, 'extension': '.json', 'prefix': prefix_path}))
 
