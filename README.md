@@ -69,7 +69,7 @@ Shown below are some of the common calls the created functions for creating, and
 
 See `Create_Index` in Postman collection
 
-POST to `http://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/create_new_index?code=<YOUR-FUNCTION-KEY>`
+POST to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/create_new_index?code=<YOUR-FUNCTION-KEY>`
 ```
 {
     "index_stem_name": "rag-index",
@@ -83,7 +83,7 @@ POST to `http://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/create_new_inde
 
 See `Get_Active_Index` in Postman collection
 
-GET to `http://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/get_active_index?code=<YOUR-FUNCTION-KEY>`
+GET to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/get_active_index?code=<YOUR-FUNCTION-KEY>`
 ```
 {
     "index_stem_name":"rag-index"
@@ -95,7 +95,7 @@ GET to `http://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/get_active_index
 
 See `Trigger_PDF_Ingestion` in Postman collection
 
-POST to `http://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/orchestrators/pdf_orchestration?code=<YOUR-FUNCTION-KEY>`
+POST to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/orchestrators/pdf_orchestrator?code=<YOUR-FUNCTION-KEY>`
 ```
 {
     "source_container": "<SOURCE_STORAGE_CONTAINER>",
