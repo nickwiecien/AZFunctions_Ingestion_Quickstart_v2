@@ -51,10 +51,12 @@ def pdf_orchestrator(context):
     cosmos_record_id = payload.get("cosmos_record_id")
     automatically_delete = payload.get("automatically_delete")
 
+    payload = yield context.call_activity("get_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'entra_id': entra_id}))
+
     # Create a status record that can be used to update CosmosDB
     status_record = payload
     status_record['id'] = cosmos_record_id
-    status_record['status'] = 'STARTING'
+    status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     # Define intermediate containers that will hold transient data
@@ -86,7 +88,7 @@ def pdf_orchestrator(context):
     # Convert the split PDF files from JSON strings to Python dictionaries
     pdf_chunks = [json.loads(x) for x in split_pdf_files]
 
-    status_record['status'] = 'CHUNKED'
+    status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     # For each PDF chunk, process it with Document Intelligence and save the results to the extracts container
@@ -99,7 +101,7 @@ def pdf_orchestrator(context):
     # Execute all the extract PDF tasks and get the results
     extracted_pdf_files = yield context.task_all(extract_pdf_tasks)
 
-    status_record['status'] = 'EXTRACTED'
+    status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     # For each extracted PDF file, generate embeddings and save the results
@@ -110,7 +112,7 @@ def pdf_orchestrator(context):
     # Execute all the generate embeddings tasks and get the results
     processed_documents = yield context.task_all(generate_embeddings_tasks)
 
-    status_record['status'] = 'VECTORIZED'
+    status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     ###################### DATA INGESTION END ######################
@@ -137,7 +139,7 @@ def pdf_orchestrator(context):
     # Execute all the insert record tasks and get the results
     insert_results = yield context.task_all(insert_tasks)
 
-    status_record['status'] = 'INDEXED'
+    status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     ###################### DATA INDEXING END ######################
@@ -151,7 +153,7 @@ def pdf_orchestrator(context):
         doc_intel_result_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path}))
         extract_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
         
-    status_record['status'] = 'COMPLETE'
+    status_record['status'] = 10
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     ###################### INTERMEDIATE DATA DELETION END ######################
@@ -671,3 +673,28 @@ def update_status_record(activitypayload: str):
 
     response = container.upsert_item(data)
     return True
+
+@app.activity_trigger(input_name="activitypayload")
+def get_status_record(activitypayload: str):
+
+    # Load the activity payload as a JSON string
+    data = json.loads(activitypayload)
+    cosmos_id = data.get("cosmos_id")
+    entra_id = data.get("entra_id")
+    cosmos_container = os.environ['COSMOS_CONTAINER']
+    cosmos_database = os.environ['COSMOS_DATABASE']
+    cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
+    cosmos_key = os.environ['COSMOS_KEY']
+
+    client = CosmosClient(cosmos_endpoint, cosmos_key)
+
+    # Select the database
+    database = client.get_database_client(cosmos_database)
+
+    # Select the container
+    container = database.get_container_client(cosmos_container)
+
+    response = container.read_item(item=cosmos_id, partition_key=entra_id)
+    if type(response) == dict:
+        return response
+    return json.loads(response)
