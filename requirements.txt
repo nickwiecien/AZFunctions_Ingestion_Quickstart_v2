@@ -2,16 +2,16 @@
 # The Python Worker is managed by Azure Functions platform
 # Manually managing azure-functions-worker may cause unexpected issues
 
-azure-cosmos
-azure-functions
-azure-functions-durable
-azure-storage-blob
+azure-cosmos==4.7.0
+azure-functions==1.19.0
+azure-functions-durable==1.2.9
+azure-storage-blob==12.20.0
 openai==0.28.1
 numpy==1.24.4
 pypdf==4.1.0
 azure-core==1.29.5
 azure-search-documents==11.4.0
-azure-ai-formrecognizer
-beautifulsoup4
-tiktoken
-pycryptodome
+azure-ai-formrecognizer==3.3.3
+beautifulsoup4==4.12.3
+tiktoken==0.7.0
+pycryptodome==3.20.0
