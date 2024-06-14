@@ -127,6 +127,41 @@ def insert_documents_vector(documents, index_name):
 
     return result
 
+def delete_documents_vector(documents, index_name):
+    """
+    Inserts a document vector into the specified search index on Azure Cognitive Search.
+
+    Args:
+    documents (list): The list of documents to insert.
+    index_name (str): The name of the search index.
+    """
+    # Get the search key, endpoint, and service name from environment variables
+    search_key = os.environ['SEARCH_KEY']
+    search_endpoint = os.environ['SEARCH_ENDPOINT']
+    search_service_name = os.environ['SEARCH_SERVICE_NAME']
+
+    # Create a SearchClient object
+    credential = AzureKeyCredential(search_key)
+    client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
+
+    deleted_records = []
+    retrieved_doc = None
+    for document in documents:
+        try:
+            retrieved_doc = client.get_document(document['id'])
+        except Exception as e:
+            pass
+        if retrieved_doc:
+            client.delete_documents(retrieved_doc)
+            try:
+                del retrieved_doc['embeddings']
+                deleted_records.append(retrieved_doc)
+            except Exception as e:
+                print(e)
+
+    return deleted_records
+
+
 def create_vector_index(stem_name, user_fields):
     # Get the search key, endpoint, and service name from environment variables
     search_key = os.environ['SEARCH_KEY']

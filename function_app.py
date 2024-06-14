@@ -15,7 +15,7 @@ from datetime import datetime
 
 from doc_intelligence_utilities import analyze_pdf, extract_results
 from aoai_utilities import generate_embeddings, get_transcription
-from ai_search_utilities import create_vector_index, get_current_index, create_update_index_alias, insert_documents_vector, delete_indexes
+from ai_search_utilities import create_vector_index, get_current_index, create_update_index_alias, insert_documents_vector, delete_indexes, delete_documents_vector
 
 app = df.DFApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -51,13 +51,13 @@ def pdf_orchestrator(context):
     cosmos_record_id = payload.get("cosmos_record_id")
     automatically_delete = payload.get("automatically_delete")
 
-    payload = yield context.call_activity("get_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'entra_id': entra_id}))
+    # payload = yield context.call_activity("get_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'entra_id': entra_id}))
 
-    # Create a status record that can be used to update CosmosDB
-    status_record = payload
-    status_record['id'] = cosmos_record_id
-    status_record['status'] = 1
-    yield context.call_activity("update_status_record", json.dumps(status_record))
+    # # Create a status record that can be used to update CosmosDB
+    # status_record = payload
+    # status_record['id'] = cosmos_record_id
+    # status_record['status'] = 1
+    # yield context.call_activity("update_status_record", json.dumps(status_record))
 
     # Define intermediate containers that will hold transient data
     chunks_container = f'{source_container}-chunks'
@@ -88,8 +88,8 @@ def pdf_orchestrator(context):
     # Convert the split PDF files from JSON strings to Python dictionaries
     pdf_chunks = [json.loads(x) for x in split_pdf_files]
 
-    status_record['status'] = 1
-    yield context.call_activity("update_status_record", json.dumps(status_record))
+    # status_record['status'] = 1
+    # yield context.call_activity("update_status_record", json.dumps(status_record))
 
     # For each PDF chunk, process it with Document Intelligence and save the results to the extracts container
     extract_pdf_tasks = []
@@ -101,8 +101,8 @@ def pdf_orchestrator(context):
     # Execute all the extract PDF tasks and get the results
     extracted_pdf_files = yield context.task_all(extract_pdf_tasks)
 
-    status_record['status'] = 1
-    yield context.call_activity("update_status_record", json.dumps(status_record))
+    # status_record['status'] = 1
+    # yield context.call_activity("update_status_record", json.dumps(status_record))
 
     # For each extracted PDF file, generate embeddings and save the results
     generate_embeddings_tasks = []
@@ -112,8 +112,8 @@ def pdf_orchestrator(context):
     # Execute all the generate embeddings tasks and get the results
     processed_documents = yield context.task_all(generate_embeddings_tasks)
 
-    status_record['status'] = 1
-    yield context.call_activity("update_status_record", json.dumps(status_record))
+    # status_record['status'] = 1
+    # yield context.call_activity("update_status_record", json.dumps(status_record))
 
     ###################### DATA INGESTION END ######################
 
@@ -139,8 +139,8 @@ def pdf_orchestrator(context):
     # Execute all the insert record tasks and get the results
     insert_results = yield context.task_all(insert_tasks)
 
-    status_record['status'] = 1
-    yield context.call_activity("update_status_record", json.dumps(status_record))
+    # status_record['status'] = 1
+    # yield context.call_activity("update_status_record", json.dumps(status_record))
 
     ###################### DATA INDEXING END ######################
 
@@ -153,13 +153,49 @@ def pdf_orchestrator(context):
         doc_intel_result_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path}))
         extract_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
         
-    status_record['status'] = 10
-    yield context.call_activity("update_status_record", json.dumps(status_record))
+    # status_record['status'] = 10
+    # yield context.call_activity("update_status_record", json.dumps(status_record))
 
     ###################### INTERMEDIATE DATA DELETION END ######################
 
     # Return the list of parent files and processed documents as a JSON string
     return json.dumps({'parent_files': parent_files, 'processed_documents': processed_documents, 'indexed_documents': insert_results, 'index_name': latest_index})
+
+@app.orchestration_trigger(context_name="context")
+def deletion_orchestrator(context):
+
+    ###################### DATA INGESTION START ######################
+    
+    # Get the input payload from the context
+    payload = context.get_input()
+    
+    # Extract the container names from the payload
+    source_container = payload.get("source_container")
+    extract_container = payload.get("extract_container")
+    prefix_path = payload.get("filename")
+    index_name = payload.get("index_name")
+    automatically_delete = payload.get("delete_all_files")
+
+    # Define intermediate containers that will hold transient data
+    chunks_container = f'{source_container}-chunks'
+    doc_intel_results_container = f'{source_container}-doc-intel-results'
+
+    # Confirm that all storage locations exist to support document ingestion
+    container_check = yield context.call_activity("check_containers", json.dumps({'source_container': source_container}))
+
+    # Get extract files
+    # Get doc intel files
+    # Get chunk files
+    # Get source files
+
+    prefix_file_path = prefix_path.split('.')[0]
+
+    extract_files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container, 'extension': '.json', 'prefix': prefix_path}))
+    doc_intel_files = yield context.call_activity("get_source_files", json.dumps({'source_container': doc_intel_results_container, 'extension': '.json', 'prefix': prefix_path}))
+    chunk_files = yield context.call_activity("get_source_files", json.dumps({'source_container': chunks_container, 'extension': '.pdf', 'prefix': prefix_path}))
+    source_files = yield context.call_activity("get_source_files", json.dumps({'source_container': source_container, 'extension': '.pdf', 'prefix': prefix_file_path}))
+
+    # Iterate over extract files and delete from AI search index
 
 
 @app.orchestration_trigger(context_name="context")
@@ -200,24 +236,50 @@ def delete_documents_orchestrator(context):
     # Extract the container name, index stem name, and prefix path from the payload
     source_container = payload.get("source_container")
     extract_container = payload.get("extract_container")
-    index_stem_name = payload.get("index_stem_name")
-    prefix_path = payload.get("prefix_path")
+    index_name = payload.get("index_name")
+    prefix_path = payload.get("filename")
+    delete_all_files = payload.get("delete_all_files")
 
     chunks_container = f'{source_container}-chunks'
     doc_intel_results_container = f'{source_container}-doc-intel-results'
 
     prefix_path = prefix_path.split('.')[0]
 
-    source_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': source_container,  'prefix': prefix_path}))
-    chunk_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': chunks_container,  'prefix': prefix_path}))
-    doc_intel_result_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path}))
-    extract_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
-    
-    # Return the list of indexed documents and the index name as a JSON string
-    return json.dumps({'deleted_source_files': source_files, 
-                       'deleted_chunks': chunk_files, 
-                       'deleted_doc_intel_results': doc_intel_result_files, 
-                       'deleted_extract_files': extract_files})
+    source_files = yield context.call_activity("get_source_files", json.dumps({'source_container': source_container,  'prefix': prefix_path, 'extension': '.pdf'}))
+    chunk_files = yield context.call_activity("get_source_files", json.dumps({'source_container': chunks_container,  'prefix': prefix_path, 'extension': '.pdf'}))
+    doc_intel_result_files = yield context.call_activity("get_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path, 'extension': '.json'}))
+    extract_files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path, 'extension': '.json'}))
+
+    deleted_ai_search_documents = yield context.call_activity("delete_records", json.dumps({'file': extract_files, 'index': index_name, 'extracts-container': extract_container}))
+
+    deleted_extract_files = []
+    deleted_doc_intel_files = []
+    deleted_chunk_files = []
+    deleted_source_files = []
+
+    if delete_all_files:
+        delete_extract_file_tasks = []
+        for file in extract_files:
+            delete_extract_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': extract_container, 'prefix': file})))
+        deleted_extract_files = yield context.task_all(delete_extract_file_tasks)
+
+        delete_doc_intel_file_tasks = []
+        for file in doc_intel_result_files:
+            delete_doc_intel_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container, 'prefix': file})))
+        deleted_doc_intel_files = yield context.task_all(delete_doc_intel_file_tasks)
+
+        delete_chunk_file_tasks = []
+        for file in chunk_files:
+            delete_chunk_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': chunks_container, 'prefix': file})))
+        deleted_chunk_files = yield context.task_all(delete_chunk_file_tasks)
+
+        delete_source_file_tasks = []
+        for file in source_files:
+            delete_source_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': source_container, 'prefix': file})))
+        deleted_source_files = yield context.task_all(delete_source_file_tasks)
+
+    return json.dumps({'deleted_ai_search_documents': deleted_ai_search_documents, 'deleted_extract_files': deleted_extract_files, 'deleted_doc_intel_files': deleted_doc_intel_files, 'deleted_chunk_files': deleted_chunk_files, 'deleted_source_files': deleted_source_files})
+
 
 # Activities
 @app.activity_trigger(input_name="activitypayload")
@@ -585,6 +647,43 @@ def insert_record(activitypayload: str):
 
     # Return the file name
     return file
+
+@app.activity_trigger(input_name="activitypayload")
+def delete_records(activitypayload: str):
+
+    # Load the activity payload as a JSON string
+    data = json.loads(activitypayload)
+
+    # Extract the file name, index, fields, and extracts container from the payload
+    file = data.get("file")
+    index = data.get("index")
+    extracts_container = data.get("extracts-container")
+
+    # Create a BlobServiceClient object which will be used to create a container client
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+
+    # Get a ContainerClient object for the extracts container
+    container_client = blob_service_client.get_container_client(container=extracts_container)
+
+    records_to_delete = []
+
+    for f in file:
+        # Get a BlobClient object for the file
+        blob_client = container_client.get_blob_client(blob=f)
+
+        # Download the file as a string
+        file_data = (blob_client.download_blob().readall()).decode('utf-8')
+
+        # Load the file data as a JSON string
+        file_data =  json.loads(file_data)
+
+        # Insert the file data into the specified index
+        records_to_delete.append(file_data)
+    
+    deleted_records = delete_documents_vector(records_to_delete, index)
+
+    # Return the file name
+    return deleted_records
 
 # Standalone Functions
 

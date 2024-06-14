@@ -1,6 +1,7 @@
 from azure.ai.formrecognizer import DocumentAnalysisClient, AnalyzeResult
 from azure.core.credentials import AzureKeyCredential
 import os
+import time
 
 def table_to_html(table):
     """
@@ -100,8 +101,16 @@ def analyze_pdf(data):
 
     document_analysis_client = DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
     
+    processed = False
+
     # Begin analysis of the document  
-    poller = document_analysis_client.begin_analyze_document("prebuilt-document", data)  
+    while not processed:  
+        try:  
+            poller = document_analysis_client.begin_analyze_document("prebuilt-document", data)  
+            processed = True  
+        except Exception as e:  
+            print(e)  
+            time.sleep(5)
 
     # Get the result of the analysis  
     result = poller.result()  
