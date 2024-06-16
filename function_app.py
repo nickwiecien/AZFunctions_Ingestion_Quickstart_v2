@@ -51,6 +51,7 @@ def pdf_orchestrator(context):
     cosmos_record_id = payload.get("cosmos_record_id")
     automatically_delete = payload.get("automatically_delete")
 
+    # Get status record from Cosmos Database - continue on if no record is found
     try:
         payload = yield context.call_activity("get_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'entra_id': entra_id}))
         context.set_custom_status('Retrieved Cosmos Record Successfully')
@@ -79,7 +80,8 @@ def pdf_orchestrator(context):
         context.set_custom_status('Document Processing Containers Checked')
         
     except Exception as e:
-        status_record['status'] = 0
+        context.set_custom_status('Ingestion Failed During Container Check')
+        status_record['status'] = -1
         status_record['status_message'] = 'Ingestion Failed During Container Check'
         status_record['error_message'] = str(e)
         status_record['processing_progress'] = 0.0
@@ -90,12 +92,13 @@ def pdf_orchestrator(context):
     parent_files = []
     extracted_files = []
     
+     # Get the list of files in the source container
     try:
-        # Get the list of files in the source container
         files = yield context.call_activity("get_source_files", json.dumps({'source_container': source_container, 'extension': '.pdf', 'prefix': prefix_path}))
         context.set_custom_status('Retrieved Source Files')
     except Exception as e:
-        status_record['status'] = 0
+        context.set_custom_status('Ingestion Failed During File Retrieval')
+        status_record['status'] = -1
         status_record['status_message'] = 'Ingestion Failed During File Retrieval'
         status_record['error_message'] = str(e)
         status_record['processing_progress'] = 0.0
@@ -119,19 +122,18 @@ def pdf_orchestrator(context):
         # Convert the split PDF files from JSON strings to Python dictionaries
         pdf_chunks = [json.loads(x) for x in split_pdf_files]
 
-        context.set_custom_status('PDF Chunking Completed')
-
-        status_record['status_message'] = 'Chunking Completed'
-        status_record['processing_progress'] = 0.2
-
     except Exception as e:
-        status_record['status'] = 0
+        context.set_custom_status('Ingestion Failed During PDF Chunking')
+        status_record['status'] = -1
         status_record['status_message'] = 'Ingestion Failed During PDF Chunking'
         status_record['error_message'] = str(e)
         status_record['processing_progress'] = 0.0
         yield context.call_activity("update_status_record", json.dumps(status_record))
         raise e
 
+    context.set_custom_status('PDF Chunking Completed')
+    status_record['status_message'] = 'Chunking Completed'
+    status_record['processing_progress'] = 0.2
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
@@ -146,19 +148,18 @@ def pdf_orchestrator(context):
         # Execute all the extract PDF tasks and get the results
         extracted_pdf_files = yield context.task_all(extract_pdf_tasks)
 
-        context.set_custom_status('Document Extraction Completion')
-
-        status_record['status_message'] = 'Document Extraction Completion'
-        status_record['processing_progress'] = 0.6
-
     except Exception as e:
-        status_record['status'] = 0
+        context.set_custom_status('Ingestion Failed During Document Intelligence Extraction')
+        status_record['status'] = -1
         status_record['status_message'] = 'Ingestion Failed During Document Intelligence Extraction'
         status_record['error_message'] = str(e)
         status_record['processing_progress'] = 0.0
         yield context.call_activity("update_status_record", json.dumps(status_record))
         raise e
 
+    context.set_custom_status('Document Extraction Completion')
+    status_record['status_message'] = 'Document Extraction Completion'
+    status_record['processing_progress'] = 0.6
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
@@ -170,18 +171,19 @@ def pdf_orchestrator(context):
             generate_embeddings_tasks.append(context.call_activity("generate_extract_embeddings", json.dumps({'extract_container': extract_container, 'file': file})))
         # Execute all the generate embeddings tasks and get the results
         processed_documents = yield context.task_all(generate_embeddings_tasks)
-        context.set_custom_status('Vectorization Completed')
-
-        status_record['status_message'] = 'Vectorization Completed'
-        status_record['processing_progress'] = 0.7
+        
     except Exception as e:
-        status_record['status'] = 0
+        context.set_custom_status('Ingestion Failed During Vectorization')
+        status_record['status'] = -1
         status_record['status_message'] = 'Ingestion Failed During Vectorization'
         status_record['error_message'] = str(e)
         status_record['processing_progress'] = 0.0
         yield context.call_activity("update_status_record", json.dumps(status_record))
         raise e
 
+    context.set_custom_status('Vectorization Completed')
+    status_record['status_message'] = 'Vectorization Completed'
+    status_record['processing_progress'] = 0.7
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
@@ -206,6 +208,7 @@ def pdf_orchestrator(context):
         status_record['status_message'] = 'Index Retrieval Complete'
 
     except Exception as e:
+        context.set_custom_status('Ingestion Failed During Index Retrieval')
         status_record['status'] = 0
         status_record['status_message'] = 'Ingestion Failed During Index Retrieval'
         status_record['error_message'] = str(e)
@@ -222,6 +225,7 @@ def pdf_orchestrator(context):
         # Execute all the insert record tasks and get the results
         insert_results = yield context.task_all(insert_tasks)
     except Exception as e:
+        context.set_custom_status('Ingestion Failed During Indexing')
         status_record['status'] = 0
         status_record['status_message'] = 'Ingestion Failed During Indexing'
         status_record['error_message'] = str(e)
@@ -248,6 +252,7 @@ def pdf_orchestrator(context):
             doc_intel_result_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path}))
             extract_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
         except Exception as e:
+            context.set_custom_status('Ingestion Failed During Intermediate Data Clean Up')
             status_record['status'] = 0
             status_record['status_message'] = 'Ingestion Failed During Intermediate Data Clean Up'
             status_record['error_message'] = str(e)
