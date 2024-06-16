@@ -1,6 +1,7 @@
 from azure.ai.formrecognizer import DocumentAnalysisClient, AnalyzeResult
 from azure.core.credentials import AzureKeyCredential
 import os
+import time
 
 def table_to_html(table):
     """
@@ -99,14 +100,22 @@ def extract_results(afr_result, source_file_name):
 def analyze_pdf(data):
 
     document_analysis_client = DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
-    
-    # Begin analysis of the document  
-    poller = document_analysis_client.begin_analyze_document("prebuilt-document", data)  
+    json_result = {}
 
-    # Get the result of the analysis  
-    result = poller.result()  
+    processed = False
+    while not processed:
+        try:
+            # Begin analysis of the document  
+            poller = document_analysis_client.begin_analyze_document("prebuilt-document", data)  
+            processed = True
+            
+            # Get the result of the analysis  
+            result = poller.result()  
 
-    # Convert the result to a dictionary  
-    json_result = result.to_dict()  
+            # Convert the result to a dictionary  
+            json_result = result.to_dict()  
+        except Exception as e:
+            time.sleep(5)
+            print(e)
 
     return json_result
