@@ -51,67 +51,139 @@ def pdf_orchestrator(context):
     cosmos_record_id = payload.get("cosmos_record_id")
     automatically_delete = payload.get("automatically_delete")
 
-    payload = yield context.call_activity("get_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'entra_id': entra_id}))
+    # Get status record from Cosmos Database - continue on if no record is found
+    try:
+        payload = yield context.call_activity("get_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'entra_id': entra_id}))
+        context.set_custom_status('Retrieved Cosmos Record Successfully')
+    except Exception as e:
+        context.set_custom_status('Cosmos Record Not Found')
+        pass
 
     # Create a status record that can be used to update CosmosDB
-    status_record = payload
-    status_record['id'] = cosmos_record_id
-    status_record['status'] = 1
-    yield context.call_activity("update_status_record", json.dumps(status_record))
+    try:
+        status_record = payload
+        status_record['id'] = cosmos_record_id
+        status_record['status'] = 1
+        status_record['status_message'] = 'Starting Ingestion Process'
+        status_record['processing_progress'] = 0.1
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+    except Exception as e:
+        pass
 
     # Define intermediate containers that will hold transient data
     chunks_container = f'{source_container}-chunks'
     doc_intel_results_container = f'{source_container}-doc-intel-results'
 
     # Confirm that all storage locations exist to support document ingestion
-    container_check = yield context.call_activity("check_containers", json.dumps({'source_container': source_container}))
+    try:
+        container_check = yield context.call_activity("check_containers", json.dumps({'source_container': source_container}))
+        context.set_custom_status('Document Processing Containers Checked')
+        
+    except Exception as e:
+        context.set_custom_status('Ingestion Failed During Container Check')
+        status_record['status'] = -1
+        status_record['status_message'] = 'Ingestion Failed During Container Check'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise e
 
     # Initialize lists to store parent and extracted files
     parent_files = []
     extracted_files = []
     
-    # Get the list of files in the source container
-    files = yield context.call_activity("get_source_files", json.dumps({'source_container': source_container, 'extension': '.pdf', 'prefix': prefix_path}))
+     # Get the list of files in the source container
+    try:
+        files = yield context.call_activity("get_source_files", json.dumps({'source_container': source_container, 'extension': '.pdf', 'prefix': prefix_path}))
+        context.set_custom_status('Retrieved Source Files')
+    except Exception as e:
+        context.set_custom_status('Ingestion Failed During File Retrieval')
+        status_record['status'] = -1
+        status_record['status_message'] = 'Ingestion Failed During File Retrieval'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise e
+
 
     # For each PDF file, split it into single-page chunks and save to chunks container
-    split_pdf_tasks = []
-    for file in files:
-        # Append the file to the parent_files list
-        parent_files.append(file)
-        # Create a task to split the PDF file and append it to the split_pdf_tasks list
-        split_pdf_tasks.append(context.call_activity("split_pdf_files", json.dumps({'source_container': source_container, 'chunks_container': chunks_container, 'file': file})))
-    # Execute all the split PDF tasks and get the results
-    split_pdf_files = yield context.task_all(split_pdf_tasks)
-    # Flatten the list of split PDF files
-    split_pdf_files = [item for sublist in split_pdf_files for item in sublist]
+    try:
+        split_pdf_tasks = []
+        for file in files:
+            # Append the file to the parent_files list
+            parent_files.append(file)
+            # Create a task to split the PDF file and append it to the split_pdf_tasks list
+            split_pdf_tasks.append(context.call_activity("split_pdf_files", json.dumps({'source_container': source_container, 'chunks_container': chunks_container, 'file': file})))
+        # Execute all the split PDF tasks and get the results
+        split_pdf_files = yield context.task_all(split_pdf_tasks)
+        # Flatten the list of split PDF files
+        split_pdf_files = [item for sublist in split_pdf_files for item in sublist]
 
-    # Convert the split PDF files from JSON strings to Python dictionaries
-    pdf_chunks = [json.loads(x) for x in split_pdf_files]
+        # Convert the split PDF files from JSON strings to Python dictionaries
+        pdf_chunks = [json.loads(x) for x in split_pdf_files]
 
+    except Exception as e:
+        context.set_custom_status('Ingestion Failed During PDF Chunking')
+        status_record['status'] = -1
+        status_record['status_message'] = 'Ingestion Failed During PDF Chunking'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise e
+
+    context.set_custom_status('PDF Chunking Completed')
+    status_record['status_message'] = 'Chunking Completed'
+    status_record['processing_progress'] = 0.2
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     # For each PDF chunk, process it with Document Intelligence and save the results to the extracts container
-    extract_pdf_tasks = []
-    for pdf in pdf_chunks:
-        # Append the child file to the extracted_files list
-        extracted_files.append(pdf['child'])
-        # Create a task to process the PDF chunk and append it to the extract_pdf_tasks list
-        extract_pdf_tasks.append(context.call_activity("process_pdf_with_document_intelligence", json.dumps({'child': pdf['child'], 'parent': pdf['parent'], 'chunks_container': chunks_container, 'doc_intel_results_container': doc_intel_results_container, 'extracts_container': extract_container})))
-    # Execute all the extract PDF tasks and get the results
-    extracted_pdf_files = yield context.task_all(extract_pdf_tasks)
+    try:
+        extract_pdf_tasks = []
+        for pdf in pdf_chunks:
+            # Append the child file to the extracted_files list
+            extracted_files.append(pdf['child'])
+            # Create a task to process the PDF chunk and append it to the extract_pdf_tasks list
+            extract_pdf_tasks.append(context.call_activity("process_pdf_with_document_intelligence", json.dumps({'child': pdf['child'], 'parent': pdf['parent'], 'chunks_container': chunks_container, 'doc_intel_results_container': doc_intel_results_container, 'extracts_container': extract_container})))
+        # Execute all the extract PDF tasks and get the results
+        extracted_pdf_files = yield context.task_all(extract_pdf_tasks)
 
+    except Exception as e:
+        context.set_custom_status('Ingestion Failed During Document Intelligence Extraction')
+        status_record['status'] = -1
+        status_record['status_message'] = 'Ingestion Failed During Document Intelligence Extraction'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise e
+
+    context.set_custom_status('Document Extraction Completion')
+    status_record['status_message'] = 'Document Extraction Completion'
+    status_record['processing_progress'] = 0.6
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     # For each extracted PDF file, generate embeddings and save the results
-    generate_embeddings_tasks = []
-    for file in extracted_pdf_files:
-        # Create a task to generate embeddings for the extracted file and append it to the generate_embeddings_tasks list
-        generate_embeddings_tasks.append(context.call_activity("generate_extract_embeddings", json.dumps({'extract_container': extract_container, 'file': file})))
-    # Execute all the generate embeddings tasks and get the results
-    processed_documents = yield context.task_all(generate_embeddings_tasks)
+    try:
+        generate_embeddings_tasks = []
+        for file in extracted_pdf_files:
+            # Create a task to generate embeddings for the extracted file and append it to the generate_embeddings_tasks list
+            generate_embeddings_tasks.append(context.call_activity("generate_extract_embeddings", json.dumps({'extract_container': extract_container, 'file': file})))
+        # Execute all the generate embeddings tasks and get the results
+        processed_documents = yield context.task_all(generate_embeddings_tasks)
+        
+    except Exception as e:
+        context.set_custom_status('Ingestion Failed During Vectorization')
+        status_record['status'] = -1
+        status_record['status_message'] = 'Ingestion Failed During Vectorization'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise e
 
+    context.set_custom_status('Vectorization Completed')
+    status_record['status_message'] = 'Vectorization Completed'
+    status_record['processing_progress'] = 0.7
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
@@ -120,24 +192,50 @@ def pdf_orchestrator(context):
 
     ###################### DATA INDEXING START ######################
 
-    prefix_path = prefix_path.split('.')[0]
+    try:
+        prefix_path = prefix_path.split('.')[0]
 
-    # Get the list of files in the source container
-    files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container, 'extension': '.json', 'prefix': prefix_path}))
+        # Get the list of files in the source container
+        files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container, 'extension': '.json', 'prefix': prefix_path}))
 
-    # Get the current index and its fields
-    latest_index, fields = get_current_index(index_stem_name)
+        # Get the current index and its fields
+        latest_index, fields = get_current_index(index_stem_name)
 
-    # Use the user's provided index name rather than the latest index
-    latest_index = index_name
+        # Use the user's provided index name rather than the latest index
+        latest_index = index_name
+
+        context.set_custom_status('Index Retrieval Complete')
+        status_record['status_message'] = 'Index Retrieval Complete'
+
+    except Exception as e:
+        context.set_custom_status('Ingestion Failed During Index Retrieval')
+        status_record['status'] = 0
+        status_record['status_message'] = 'Ingestion Failed During Index Retrieval'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise e
 
     # Initialize list to store tasks for inserting records
-    insert_tasks = []
-    for file in files:
-        # Create a task to insert a record for the file and append it to the insert_tasks list
-        insert_tasks.append(context.call_activity("insert_record", json.dumps({'file': file, 'index': latest_index, 'fields': fields, 'extracts-container': extract_container, 'session_id': session_id, 'entra_id': entra_id})))
-    # Execute all the insert record tasks and get the results
-    insert_results = yield context.task_all(insert_tasks)
+    try:
+        insert_tasks = []
+        for file in files:
+            # Create a task to insert a record for the file and append it to the insert_tasks list
+            insert_tasks.append(context.call_activity("insert_record", json.dumps({'file': file, 'index': latest_index, 'fields': fields, 'extracts-container': extract_container, 'session_id': session_id, 'entra_id': entra_id})))
+        # Execute all the insert record tasks and get the results
+        insert_results = yield context.task_all(insert_tasks)
+    except Exception as e:
+        context.set_custom_status('Ingestion Failed During Indexing')
+        status_record['status'] = 0
+        status_record['status_message'] = 'Ingestion Failed During Indexing'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise e
+    
+    context.set_custom_status('Indexing Completed')
+    status_record['status_message'] = 'Indexing Completed'
+    status_record['processing_progress'] = 0.9
 
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
@@ -148,11 +246,23 @@ def pdf_orchestrator(context):
 
     if automatically_delete:
 
-        source_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': source_container,  'prefix': prefix_path}))
-        chunk_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': chunks_container,  'prefix': prefix_path}))
-        doc_intel_result_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path}))
-        extract_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
-        
+        try:
+            source_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': source_container,  'prefix': prefix_path}))
+            chunk_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': chunks_container,  'prefix': prefix_path}))
+            doc_intel_result_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path}))
+            extract_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
+        except Exception as e:
+            context.set_custom_status('Ingestion Failed During Intermediate Data Clean Up')
+            status_record['status'] = 0
+            status_record['status_message'] = 'Ingestion Failed During Intermediate Data Clean Up'
+            status_record['error_message'] = str(e)
+            status_record['processing_progress'] = 0.0
+            yield context.call_activity("update_status_record", json.dumps(status_record))
+            raise e
+    
+    context.set_custom_status('Ingestion Completed')
+    status_record['status_message'] = 'Ingestion Completed'
+    status_record['processing_progress'] = 1
     status_record['status'] = 10
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
