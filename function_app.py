@@ -12,6 +12,7 @@ import tempfile
 import re
 import requests
 from datetime import datetime
+import uuid
 
 from doc_intelligence_utilities import analyze_pdf, extract_results
 from aoai_utilities import generate_embeddings, get_transcription
@@ -72,18 +73,19 @@ def pdf_orchestrator(context):
 
     ############# NEW: Query throttle table from cosmos based on users Entra ID
     previously_processed_pages = 0
+    throttle_record = None
 
     # Set current datetime (mm/dd/yyyy)
-    timestamp = datetime.strftime("%d/%m/%Y")
+    timestamp = datetime.now().strftime("%m/%d/%Y")
     
     try:
-        previously_processed_pages = yield context.call_activity("get_throttle_record", json.dumps({'entra_id': entra_id, 'timestamp': timestamp}))
+        previously_processed_pages, throttle_record = yield context.call_activity("get_throttle_record", json.dumps({'entra_id': entra_id, 'timestamp': timestamp}))
         context.set_custom_status('Retrieved User Processed Page Count')
     except Exception as e:
         context.set_custom_status('Throttle Record Not Found')
 
     # If previously_processed_pages > throttle_page_limit raise exception
-    if previously_processed_pages >= os.environ['MAX_USER_PAGE_COUNT']:
+    if int(previously_processed_pages) >= int(os.environ['MAX_USER_PAGE_COUNT']):
         context.set_custom_status('Processing Cancelled Due to Exceeded Page Count')
         status_record['status'] = -1
         status_record['status_message'] = 'Processing Cancelled Due to Exceeded Page Count'
@@ -109,6 +111,8 @@ def pdf_orchestrator(context):
         status_record['processing_progress'] = 0.0
         yield context.call_activity("update_status_record", json.dumps(status_record))
         raise e
+    
+    ## TO-DO: ADD AN ACTIVITY FUNCTION TO RETRIEVE PAGE COUNT FROM THE UPLOADED DOC
 
     # Initialize lists to store parent and extracted files
     parent_files = []
@@ -161,12 +165,15 @@ def pdf_orchestrator(context):
 
     ############# NEW: Compare file page count to threshold 
     # If previously_processed_pages + len(pdf_chunks) > throttle_page_limit raise exception
-    if previously_processed_pages + len(pdf_chunks) >= os.environ['MAX_USER_PAGE_COUNT']:
-        remaining_pages = os.environ['MAX_USER_PAGE_COUNT'] - previously_processed_pages
-        context.set_custom_status('Processing Cancelled Due to Exceeded Page Count - Document is too large.')
+    if int(previously_processed_pages) + len(pdf_chunks) >= int(os.environ['MAX_USER_PAGE_COUNT']):
+        remaining_pages = int(os.environ['MAX_USER_PAGE_COUNT']) - int(previously_processed_pages)
+        if automatically_delete:
+            source_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': source_container,  'prefix': prefix_path}))
+            chunk_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': chunks_container,  'prefix': prefix_path})) 
+        context.set_custom_status('Processing cancelled due to exceeded page count - document is too large.')
         status_record['status'] = -1
-        status_record['status_message'] = f'Processing cancelled due to exceeded page count. You only have {str(remaining_pages)} remaining and have uploaded a document with {str(len(pdf_chunks))} pages.'
-        status_record['error_message'] = str(e)
+        status_record['status_message'] = f'Processing cancelled due to exceeded page count. User has {str(remaining_pages)} pages remaining and have uploaded a document with {str(len(pdf_chunks))} pages.'
+        status_record['error_message'] = str("User has exceeded their allowed document upload capacity.")
         status_record['processing_progress'] = 0.0
         yield context.call_activity("update_status_record", json.dumps(status_record))
         raise Exception("User has exceeded their allowed document upload capacity.")
@@ -276,12 +283,16 @@ def pdf_orchestrator(context):
 
     ############# NEW: Update throttle table with volume of processed pages
     previously_processed_pages = previously_processed_pages + len(pdf_chunks)
-    thottle_record = {
-        'entra_id': entra_id, 'timestamp': timestamp, 'processed_page_count': previously_processed_pages
-    }
+    if throttle_record is None:
+        throttle_record = {
+            'entra_id': entra_id, 'timestamp': timestamp, 'id': str(uuid.uuid4())
+        }
+    throttle_record['processed_page_count'] = previously_processed_pages
+    
     try:
-        yield context.call_activity("update_throttle_record", json.dumps(thottle_record))
+        yield context.call_activity("update_throttle_record", json.dumps(throttle_record))
     except Exception as e:
+        print(e)
         pass
 
     ###################### DATA INDEXING END ######################
@@ -873,13 +884,19 @@ def get_throttle_record(activitypayload: str):
     # Select the container
     container = database.get_container_client(cosmos_container)
 
-    # Logic to query throttle table...
-    # if record exists...
-    #     return record['processed_page_count']
-    # else
-    #     return 0
+    query = f"SELECT * FROM c WHERE c.entra_id = '{entra_id}' AND c.timestamp = '{timestamp}'"
 
-    return None
+    # Execute the query
+    items = list(container.query_items(
+        query=query,
+        enable_cross_partition_query=True
+    ))
+
+    if len(items)>0:
+        return items[0]['processed_page_count'], items[0]
+    else:
+        return 0, None
+
 
 @app.activity_trigger(input_name="activitypayload")
 def update_throttle_record(activitypayload: str):
