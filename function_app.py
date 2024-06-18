@@ -144,7 +144,7 @@ def pdf_orchestrator(context):
             # Append the child file to the extracted_files list
             extracted_files.append(pdf['child'])
             # Create a task to process the PDF chunk and append it to the extract_pdf_tasks list
-            extract_pdf_tasks.append(context.call_activity("process_pdf_with_document_intelligence", json.dumps({'child': pdf['child'], 'parent': pdf['parent'], 'chunks_container': chunks_container, 'doc_intel_results_container': doc_intel_results_container, 'extracts_container': extract_container})))
+            extract_pdf_tasks.append(context.call_activity("process_pdf_with_document_intelligence", json.dumps({'child': pdf['child'], 'parent': pdf['parent'], 'chunks_container': chunks_container, 'doc_intel_results_container': doc_intel_results_container, 'extracts_container': extract_container, 'entra_id': entra_id})))
         # Execute all the extract PDF tasks and get the results
         extracted_pdf_files = yield context.task_all(extract_pdf_tasks)
 
@@ -505,6 +505,7 @@ def process_pdf_with_document_intelligence(activitypayload: str):
     # Extract the child file name, parent file name, and container names from the payload
     child = data.get("child")
     parent = data.get("parent")
+    entra_id = data.get("entra_id")
     chunks_container = data.get("chunks_container")
     doc_intel_results_container = data.get("doc_intel_results_container")
     extracts_container = data.get("extracts_container")
@@ -579,7 +580,7 @@ def process_pdf_with_document_intelligence(activitypayload: str):
         content = page_map[0][1]
 
         # Generate a unique ID for the record
-        id_str = child
+        id_str = child + entra_id
         hash_object = hashlib.sha256()
         hash_object.update(id_str.encode('utf-8'))
         id = hash_object.hexdigest()
