@@ -70,6 +70,28 @@ def pdf_orchestrator(context):
     except Exception as e:
         pass
 
+    ############# NEW: Query throttle table from cosmos based on users Entra ID
+    previously_processed_pages = 0
+
+    # Set current datetime (mm/dd/yyyy)
+    timestamp = datetime.strftime("%d/%m/%Y")
+    
+    try:
+        previously_processed_pages = yield context.call_activity("get_throttle_record", json.dumps({'entra_id': entra_id, 'timestamp': timestamp}))
+        context.set_custom_status('Retrieved User Processed Page Count')
+    except Exception as e:
+        context.set_custom_status('Throttle Record Not Found')
+
+    # If previously_processed_pages > throttle_page_limit raise exception
+    if previously_processed_pages >= os.environ['MAX_USER_PAGE_COUNT']:
+        context.set_custom_status('Processing Cancelled Due to Exceeded Page Count')
+        status_record['status'] = -1
+        status_record['status_message'] = 'Processing Cancelled Due to Exceeded Page Count'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise Exception("User has exceeded their allowed document upload capacity.")
+
     # Define intermediate containers that will hold transient data
     chunks_container = f'{source_container}-chunks'
     doc_intel_results_container = f'{source_container}-doc-intel-results'
@@ -136,6 +158,18 @@ def pdf_orchestrator(context):
     status_record['processing_progress'] = 0.2
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
+
+    ############# NEW: Compare file page count to threshold 
+    # If previously_processed_pages + len(pdf_chunks) > throttle_page_limit raise exception
+    if previously_processed_pages + len(pdf_chunks) >= os.environ['MAX_USER_PAGE_COUNT']:
+        remaining_pages = os.environ['MAX_USER_PAGE_COUNT'] - previously_processed_pages
+        context.set_custom_status('Processing Cancelled Due to Exceeded Page Count - Document is too large.')
+        status_record['status'] = -1
+        status_record['status_message'] = f'Processing cancelled due to exceeded page count. You only have {str(remaining_pages)} remaining and have uploaded a document with {str(len(pdf_chunks))} pages.'
+        status_record['error_message'] = str(e)
+        status_record['processing_progress'] = 0.0
+        yield context.call_activity("update_status_record", json.dumps(status_record))
+        raise Exception("User has exceeded their allowed document upload capacity.")
 
     # For each PDF chunk, process it with Document Intelligence and save the results to the extracts container
     try:
@@ -239,6 +273,16 @@ def pdf_orchestrator(context):
 
     status_record['status'] = 1
     yield context.call_activity("update_status_record", json.dumps(status_record))
+
+    ############# NEW: Update throttle table with volume of processed pages
+    previously_processed_pages = previously_processed_pages + len(pdf_chunks)
+    thottle_record = {
+        'entra_id': entra_id, 'timestamp': timestamp, 'processed_page_count': previously_processed_pages
+    }
+    try:
+        yield context.call_activity("update_throttle_record", json.dumps(thottle_record))
+    except Exception as e:
+        pass
 
     ###################### DATA INDEXING END ######################
 
@@ -808,3 +852,52 @@ def get_status_record(activitypayload: str):
     if type(response) == dict:
         return response
     return json.loads(response)
+
+@app.activity_trigger(input_name="activitypayload")
+def get_throttle_record(activitypayload: str):
+
+    # Load the activity payload as a JSON string
+    data = json.loads(activitypayload)
+    timestamp = data.get("timestamp")
+    entra_id = data.get("entra_id")
+    cosmos_container = os.environ['COSMOS_THROTTLE_CONTAINER']
+    cosmos_database = os.environ['COSMOS_DATABASE']
+    cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
+    cosmos_key = os.environ['COSMOS_KEY']
+
+    client = CosmosClient(cosmos_endpoint, cosmos_key)
+
+    # Select the database
+    database = client.get_database_client(cosmos_database)
+
+    # Select the container
+    container = database.get_container_client(cosmos_container)
+
+    # Logic to query throttle table...
+    # if record exists...
+    #     return record['processed_page_count']
+    # else
+    #     return 0
+
+    return None
+
+@app.activity_trigger(input_name="activitypayload")
+def update_throttle_record(activitypayload: str):
+
+    # Load the activity payload as a JSON string
+    data = json.loads(activitypayload)
+    cosmos_container = os.environ['COSMOS_THROTTLE_CONTAINER']
+    cosmos_database = os.environ['COSMOS_DATABASE']
+    cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
+    cosmos_key = os.environ['COSMOS_KEY']
+
+    client = CosmosClient(cosmos_endpoint, cosmos_key)
+
+    # Select the database
+    database = client.get_database_client(cosmos_database)
+
+    # Select the container
+    container = database.get_container_client(cosmos_container)
+
+    response = container.upsert_item(data)
+    return True
