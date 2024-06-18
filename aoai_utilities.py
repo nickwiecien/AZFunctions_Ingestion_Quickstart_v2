@@ -33,6 +33,11 @@ def generate_embeddings(text):
             processed = True
         except Exception as e:  # Catch any exceptions and retry after a delay
             print(e)
+
+            # Added to handle exception where passed context exceeds embedding model's context window
+            if 'maximum context length' in str(e):
+                text = text[:int(len(text)*0.95)]
+
             time.sleep(5)
 
     # Extract embeddings from the response
