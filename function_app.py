@@ -234,10 +234,9 @@ def pdf_orchestrator(context):
         raise e
     
     context.set_custom_status('Indexing Completed')
-    status_record['status_message'] = 'Indexing Completed'
-    status_record['processing_progress'] = 0.9
-
-    status_record['status'] = 1
+    status_record['status_message'] = 'Ingestion Completed'
+    status_record['processing_progress'] = 1
+    status_record['status'] = 10
     yield context.call_activity("update_status_record", json.dumps(status_record))
 
     ###################### DATA INDEXING END ######################
@@ -251,20 +250,19 @@ def pdf_orchestrator(context):
             chunk_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': chunks_container,  'prefix': prefix_path}))
             doc_intel_result_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path}))
             extract_files = yield context.call_activity("delete_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
+
+            context.set_custom_status('Ingestion & Clean Up Completed')
+            status_record['cleanup_status_message'] = 'Intermediate Data Clean Up Completed'
+            status_record['cleanup_status'] = 10
+            yield context.call_activity("update_status_record", json.dumps(status_record))
+        
         except Exception as e:
-            context.set_custom_status('Ingestion Failed During Intermediate Data Clean Up')
-            status_record['status'] = 0
-            status_record['status_message'] = 'Ingestion Failed During Intermediate Data Clean Up'
-            status_record['error_message'] = str(e)
-            status_record['processing_progress'] = 0.0
+            context.set_custom_status('Data Clean Up Failed')
+            status_record['cleanup_status'] = -1
+            status_record['cleanup_status_message'] = 'Intermediate Data Clean Up Failed'
+            status_record['cleanup_error_message'] = str(e)
             yield context.call_activity("update_status_record", json.dumps(status_record))
             raise e
-    
-    context.set_custom_status('Ingestion Completed')
-    status_record['status_message'] = 'Ingestion Completed'
-    status_record['processing_progress'] = 1
-    status_record['status'] = 10
-    yield context.call_activity("update_status_record", json.dumps(status_record))
 
     ###################### INTERMEDIATE DATA DELETION END ######################
 
