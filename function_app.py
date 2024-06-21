@@ -37,7 +37,7 @@ async def http_start(req: func.HttpRequest, client):
 def pdf_orchestrator(context):
 
     first_retry_interval_in_milliseconds = 5000
-    max_number_of_attempts = 3
+    max_number_of_attempts = 2
     retry_options = df.RetryOptions(first_retry_interval_in_milliseconds, max_number_of_attempts)
 
     ###################### DATA INGESTION START ######################
