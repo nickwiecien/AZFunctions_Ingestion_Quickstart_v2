@@ -12,6 +12,7 @@ import tempfile
 import re
 import requests
 from datetime import datetime
+import magic
 
 from doc_intelligence_utilities import analyze_pdf, extract_results
 from aoai_utilities import generate_embeddings, get_transcription
@@ -461,8 +462,17 @@ def split_pdf_files(activitypayload: str):
     # If the PDF file exists
     if  pdf_blob_client.exists():
 
+        blob_data = pdf_blob_client.download_blob().readall()
+
+        file_type = magic.Magic(mime=True)
+
+        detected_file_type = file_type.from_buffer(blob_data)
+
+        if detected_file_type != 'application/pdf':
+            raise Exception(f'{file} is not of type PDF. Detected MIME type: {detected_file_type}')
+
         # Create a PdfReader object for the PDF file
-        pdf_reader = PdfReader(BytesIO(pdf_blob_client.download_blob().readall()))
+        pdf_reader = PdfReader(BytesIO(blob_data))
 
         # Get the number of pages in the PDF file
         num_pages = len(pdf_reader.pages)
