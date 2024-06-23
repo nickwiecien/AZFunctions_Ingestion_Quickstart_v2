@@ -133,6 +133,9 @@ def pdf_orchestrator(context):
         context.set_custom_status('Ingestion Failed During PDF Chunking')
         status_record['status'] = -1
         status_record['status_message'] = 'Ingestion Failed During PDF Chunking'
+        # Custom logic for incorrect file type
+        if 'not of type PDF' in str(e):
+            status_record['status_message'] = 'Ingestion Failed During PDF Chunking: Non-PDF File Type Detected'
         status_record['error_message'] = str(e)
         status_record['processing_progress'] = 0.0
         yield context.call_activity("update_status_record", json.dumps(status_record))
