@@ -12,7 +12,7 @@ import tempfile
 import re
 import requests
 from datetime import datetime
-import magic
+import filetype
 
 from doc_intelligence_utilities import analyze_pdf, extract_results
 from aoai_utilities import generate_embeddings, get_transcription
@@ -467,12 +467,10 @@ def split_pdf_files(activitypayload: str):
 
         blob_data = pdf_blob_client.download_blob().readall()
 
-        file_type = magic.Magic(mime=True)
+        kind = filetype.guess(blob_data)
 
-        detected_file_type = file_type.from_buffer(blob_data)
-
-        if detected_file_type != 'application/pdf':
-            raise Exception(f'{file} is not of type PDF. Detected MIME type: {detected_file_type}')
+        if kind.EXTENSION != 'pdf':
+            raise Exception(f'{file} is not of type PDF. Detected MIME type: {kind.EXTENSION}')
 
         # Create a PdfReader object for the PDF file
         pdf_reader = PdfReader(BytesIO(blob_data))
@@ -759,7 +757,7 @@ def get_active_index(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.function_name(name="schedule_create_index")
-@app.schedule(schedule="0 0 12/12 * * *", arg_name="createtimer", run_on_startup=True,
+@app.schedule(schedule="0 0 12/12 * * *", arg_name="createtimer", run_on_startup=False,
               use_monitor=False) 
 def schedule_create_index(createtimer: func.TimerRequest) -> None:
     # Extract the index stem name and fields from the payload
@@ -775,9 +773,10 @@ def schedule_create_index(createtimer: func.TimerRequest) -> None:
 
     # Return the response
     return response
+    
 
 @app.function_name(name="schedule_delete_index")
-@app.schedule(schedule="0 0 12/12 * * *", arg_name="deletetimer", run_on_startup=True,
+@app.schedule(schedule="0 0 12/12 * * *", arg_name="deletetimer", run_on_startup=False,
               use_monitor=False) 
 def schedule_delete_index(deletetimer: func.TimerRequest) -> None:
     # Extract the index stem name and fields from the payload
