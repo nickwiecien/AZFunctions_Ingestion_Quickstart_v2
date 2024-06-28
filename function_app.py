@@ -765,7 +765,8 @@ def schedule_create_index(createtimer: func.TimerRequest) -> None:
     stem_name = 'rag-index'
    
     fields = {
-        "content": "string", "pagenumber": "int", "sourcefile": "string", "sourcepage": "string", "category": "string",
+        "content": "string", "pagenumber": "int", "sourcefile": "string", 
+        "sourcepage": "string", "category": "string",
         "entra_id": "string", "session_id": "string"
     }
 
