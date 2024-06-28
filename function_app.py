@@ -780,7 +780,8 @@ def schedule_create_index(createtimer: func.TimerRequest) -> None:
             print(f"Create Index - Attempt {attempts+1} failed: {e}")
             time.sleep(10)
             attempts += 1
-            logging.error(e)
+            if attempts == max_retries:
+                logging.error(e)
 
 
 @app.function_name(name="schedule_delete_index")
@@ -801,7 +802,8 @@ def schedule_delete_index(deletetimer: func.TimerRequest) -> None:
             print(f"Delete Indexes - Attempt {attempts+1} failed: {e}")
             time.sleep(10)
             attempts += 1
-            logging.error(e)
+            if attempts == max_retries:
+                logging.error(e)
 
 
 @app.activity_trigger(input_name="activitypayload")
