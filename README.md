@@ -58,7 +58,7 @@ The code contained within this repo can be deployed to your Azure Function app u
 
 ```
 # Azure Functions Core Tools Deployment
-func azure functionapp publish <YOUR-FUNCTION-APP-NAME> --publish-settings-only
+func azure functionapp publish <YOUR-FUNCTION-APP-NAME>
 ```
 
 ## Utilization & Testing
